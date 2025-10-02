@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Summary Result</title>
+  <!-- TailwindCSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'ui-sans-serif', 'system-ui']
+          }
+        }
+      }
+    }
+  </script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+</head>
+<body class="bg-gray-50 dark:bg-gray-900 font-sans text-gray-800 dark:text-gray-200 transition-colors">
+<div class="flex h-screen">
+  <!-- Sidebar -->
+  <div class="w-72 bg-gray-900 dark:bg-gray-800 text-white p-5 flex flex-col">
+    <h2 class="text-lg font-semibold mb-3">Metadata</h2>
+    <p class="text-sm mb-2"><strong>Filename:</strong> {{ filename }}</p>
+    <button class="text-blue-300 text-sm hover:text-blue-400"
+            onclick="toggleFileText()">⏷ Show/Hide Full Case Text</button>
+    <pre id="caseText" class="hidden bg-gray-800 p-3 mt-3 rounded-lg text-xs overflow-x-auto">{{ session['case_text'] }}</pre>
+  </div>
+
+  <!-- Main Content -->
+  <div class="flex-1 p-6 overflow-y-auto relative">
+    <!-- Dark mode toggle -->
+    <button onclick="toggleDarkMode()" 
+            class="absolute top-4 right-4 px-3 py-1 text-sm rounded-full bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 hover:bg-gray-300 dark:hover:bg-gray-600 transition">
+      🌙 / ☀️
+    </button>
+
+    <h2 class="text-2xl font-bold mb-5">Summary</h2>
+
+    {% for key, value in summary.items() %}
+    <div class="mb-6 bg-white dark:bg-gray-800 shadow-sm rounded-xl p-5 border border-gray-200 dark:border-gray-700 hover:shadow-md transition">
+      <h3 class="text-lg font-semibold mb-2">{{ key }}</h3>
+
+      {% if key == "Similar Cases" %}
+      <div class="space-y-3">
+        {% for case in value %}
+        <div class="p-3 border border-gray-200 dark:border-gray-700 rounded-lg bg-gray-50 dark:bg-gray-700">
+          <p class="text-sm">
+            <a href="{{ case.link }}" class="text-blue-600 hover:underline" target="_blank">
+              <strong>{{ case.judgement }}</strong> ({{ case.citation }}) – No. {{ case.no }}
+            </a>
+          </p>
+          <button class="text-blue-600 dark:text-blue-400 text-xs mt-1 hover:underline"
+                  onclick="toggleBrief('brief-{{ loop.index }}')">⏷ Show/Hide Brief</button>
+          <div id="brief-{{ loop.index }}" class="hidden mt-2 p-2 bg-white dark:bg-gray-800 border-l-4 border-green-500 text-sm rounded">
+            {{ case.brief }}
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div contenteditable="true" id="summary-{{ loop.index }}" 
+           class="p-3 border border-gray-200 dark:border-gray-700 rounded-lg bg-gray-50 dark:bg-gray-700">
+        {{ value }}
+      </div>
+      <div class="mt-3 space-x-2">
+        <button onclick="copyToClipboard('summary-{{ loop.index }}')" class="px-3 py-1 text-sm rounded-full bg-blue-600 text-white hover:bg-blue-700">Copy</button>
+        <button onclick="regenerate('{{ key }}', {{ loop.index }})" class="px-3 py-1 text-sm rounded-full bg-indigo-600 text-white hover:bg-indigo-700">Regenerate</button>
+        <button onclick="explain('{{ key }}')" class="px-3 py-1 text-sm rounded-full bg-gray-600 text-white hover:bg-gray-700">Explain</button>
+      </div>
+      {% endif %}
+    </div>
+    {% endfor %}
+
+    <!-- Legal Citations -->
+    <button class="text-blue-600 dark:text-blue-400 text-sm mb-2 hover:underline" onclick="toggleCitations()">⏷ Show/Hide Legal Citations</button>
+    <div id="citationsBlock" class="hidden space-y-5">
+      <div class="bg-white dark:bg-gray-800 p-5 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
+        <h3 class="font-semibold mb-3">Top 5 Legal Citations (BM25 - Word-based Match)</h3>
+        <div class="space-y-3">
+          {% for citation in bm25_citations %}
+          <blockquote class="bg-yellow-50 dark:bg-yellow-900 border-l-4 border-yellow-400 p-3 rounded">
+            <p class="font-medium">{{ citation.citation_source }} ({{ citation.citation_year }})</p>
+            <p class="text-sm">{{ citation.content }}</p>
+          </blockquote>
+          {% endfor %}
+        </div>
+      </div>
+
+      <div class="bg-white dark:bg-gray-800 p-5 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
+        <h3 class="font-semibold mb-3">Top 5 Relevant Legal Citations (Embedding Search)</h3>
+        <div class="space-y-3">
+          {% for citation in similar_citations %}
+          <blockquote class="bg-gray-50 dark:bg-gray-700 border-l-4 border-blue-500 p-3 rounded">
+            <p class="font-medium">{{ citation.citation_source }} ({{ citation.citation_year }})</p>
+            <p class="text-sm">{{ citation.content }}</p>
+          </blockquote>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+
+    <!-- Sectoral Digest -->
+    <button class="text-blue-600 dark:text-blue-400 text-sm mb-2 hover:underline" onclick="toggleSectoral()">⏷ Show/Hide Sectoral Digest</button>
+    <div id="sectoralBlock" class="hidden space-y-5">
+      <div class="bg-white dark:bg-gray-800 p-5 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
+        <h3 class="font-semibold mb-3">Top 5 Sectoral Digest Chunks (Embedding Search)</h3>
+        <div class="space-y-3">
+          {% for chunk in sectoral_chunks %}
+          <blockquote class="bg-green-50 dark:bg-green-900 border-l-4 border-green-500 p-3 rounded">
+            <p class="font-medium">{{ chunk.title }} ({{ chunk.sector }}) – {{ chunk.citation }}</p>
+            <p class="text-sm">{{ chunk.content }}</p>
+          </blockquote>
+          {% endfor %}
+        </div>
+      </div>
+
+      <div class="bg-white dark:bg-gray-800 p-5 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
+        <h3 class="font-semibold mb-3">Top 5 Sectoral Digest Chunks (BM25 Match)</h3>
+        <div class="space-y-3">
+          {% for chunk in sectoral_chunks_bm25 %}
+          <blockquote class="bg-blue-50 dark:bg-blue-900 border-l-4 border-blue-500 p-3 rounded">
+            <p class="font-medium">{{ chunk.title }} ({{ chunk.sector }}) – {{ chunk.citation }}</p>
+            <p class="text-sm">{{ chunk.content }}</p>
+          </blockquote>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+
+    <!-- Download Section -->
+    <div class="mt-8 bg-white dark:bg-gray-800 p-6 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm text-center">
+      <button onclick="downloadAll()" class="px-4 py-2 bg-green-600 text-white rounded-full hover:bg-green-700">⬇️ Download All</button>
+      <div class="mt-5">
+        <label for="modelSelect" class="block mb-1 font-medium">Regenerate with different model:</label>
+        <select id="modelSelect" class="border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-700">
+          <option value="gemini-2.0-flash">Gemini 2.0 Flash</option>
+          <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
+        </select>
+        <button onclick="regenerateWithNewModel()" class="ml-2 px-4 py-2 bg-indigo-600 text-white rounded-full hover:bg-indigo-700">🔁 Re-run Summary</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Scripts -->
+<script>
+  // Dark mode toggle with persistence
+  function toggleDarkMode() {
+    document.documentElement.classList.toggle('dark');
+    if (document.documentElement.classList.contains('dark')) {
+      localStorage.setItem('theme', 'dark');
+    } else {
+      localStorage.setItem('theme', 'light');
+    }
+  }
+
+  // Load preference
+  if (localStorage.getItem('theme') === 'dark') {
+    document.documentElement.classList.add('dark');
+  }
+
+  function toggleFileText() {
+    document.getElementById('caseText').classList.toggle('hidden');
+  }
+  function copyToClipboard(id) {
+    const el = document.getElementById(id);
+    navigator.clipboard.writeText(el.innerText);
+    alert("Copied to clipboard");
+  }
+  function downloadAll() {
+    const sections = document.querySelectorAll('.bg-white, .dark\\:bg-gray-800');
+    let text = '';
+    sections.forEach(section => {
+      const title = section.querySelector('h3')?.innerText || '';
+      const content = section.innerText;
+      text += `--- ${title} ---\n\n${content}\n\n`;
+    });
+    const blob = new Blob([text], { type: 'text/plain' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = "summary.txt";
+    a.click();
+  }
+  function regenerate(section, index) {
+    fetch('/regenerate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ section })
+    })
+    .then(res => res.json())
+    .then(data => {
+      document.getElementById('summary-' + index).innerText = data.output;
+    });
+  }
+  function explain(section) {
+    alert("Explain clicked for " + section);
+  }
+  function regenerateWithNewModel() {
+    const model = document.getElementById('modelSelect').value;
+    fetch('/reprocess-model', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model })
+    })
+    .then(res => res.json())
+    .then(() => location.reload());
+  }
+  function toggleCitations() {
+    document.getElementById('citationsBlock').classList.toggle('hidden');
+  }
+  function toggleSectoral() {
+    document.getElementById('sectoralBlock').classList.toggle('hidden');
+  }
+  function toggleBrief(id) {
+    document.getElementById(id).classList.toggle('hidden');
+  }
+</script>
+</body>
+</html>
