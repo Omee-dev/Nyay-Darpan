@@ -1,0 +1,12 @@
+flask
+python-dotenv
+pandas
+PyMuPDF
+sentence-transformers
+scikit-learn
+rank-bm25
+nltk
+python-docx
+google-generativeai
+mistralai
+dotenv
